@@ -7,7 +7,8 @@ When performing repeated integration or interpolation of large datasets over fix
 
 Mat-Op-Ex functions are designed to be analgous to their conventional counterparts, except that they recieve no function data and output a matrix instead. To avoid dealing with high-order tensor operations, physical dimensions are always vectorized within these functions, such that the operator matrix is limited to order N=2. Further details are available in the source code files, and the user should make use of the test scripts available. 
 
-<a href="url"><img src="https://github.com/lynch4815/mat-op-ex/blob/main/figures/test_interp2_base.png" align="left" height="48" width="48" ></a>
+<img src="https://github.com/lynch4815/mat-op-ex/blob/main/figures/test_interp2_base.png" alt="p1" width="600"/>
+
 
 ## Current Status
 Mat-Op-Ex is currently tested to support 1D and 2D interpolation (nearest, linear, and cubic) and integration (trapz, simpsons rule) on 1-D and 2-D based grids that are evenly spaced along each axis (i.e. generated with [ndgrid](https://www.mathworks.com/help/matlab/ref/ndgrid.html)). All functions test within machine precision of MATLAB functions, except for the cubic interpolation on the edges of the domain, where a difference in boundary conditions incur a typical error of <1%. 
