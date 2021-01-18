@@ -1,7 +1,7 @@
 ﻿
 close all
 clear; clc;
-addpath('core/');
+addpath('../../source/')
 
 % This script demonstrates the matrix extraction method for solving a
 % spherical integration problem with symmetry along the phi (azimuth) axis.

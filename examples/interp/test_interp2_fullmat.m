@@ -1,11 +1,11 @@
 ﻿
 close all
 clear; clc;
-addpath('core/');
+addpath('../../source/')
 
-% This script demonstrates the matrix extraction method on an interp1 case
-% where the entire line is shifted in the X-axis by 1/10 the X range.
-% This requires remapping every cell, and handling edge cases. Spy
+% This script demonstrates the matrix extraction method on an interp2 case
+% where the entire surface is shifted in the X&Y-axis by 1/10 the X/Y
+% range. This requires remapping every cell, and handling edge cases. Spy
 % analysis of the density of the sparse matrix is included
 %
 % NOTE: regions of shift plot contain out-of-bound NaNs, and are not
@@ -15,12 +15,17 @@ addpath('core/');
 
 % Get reference data
 nx = 18;
+ny = 20;
 
 % Define Grid Limits
-xref(:,1) = linspace( -2.0, 3.0, nx );
+xref(:,1) = linspace( -1.0, 1.0, nx );
+yref(:,1) = linspace( -1.0, 1.2, ny ); 
+
+% Create Mesh with Ngrid or meshgrid
+[ X , Y ] = ndgrid(   xref, yref );
 
 % Create Test Surface
-Z(:,1) = 10.0.*xref.*xref + 0.8.*xref + 1.2;
+Z = 3.0*peaks(X,Y);
 
 
 %% Problem Setup
@@ -29,7 +34,8 @@ Z(:,1) = 10.0.*xref.*xref + 0.8.*xref + 1.2;
 interp_type = 'cubic';
 
 % Setup queries to seek out the point down and to the left
-xquery = xref - 0.1*range(xref);
+xquery = X - 0.1*range(xref);
+yquery = Y - 0.1*range(yref);
 
 
 %% Getting Interpolations from matrix method
@@ -38,10 +44,13 @@ xquery = xref - 0.1*range(xref);
 nsize = size(xquery);
 
 % Get Sparse Matrix of Remap Coefficients
-M = interp1_matrix( xref, xquery, interp_type , 35.0);
+M = interp2_matrix( X, Y, xquery, yquery, interp_type );
 
 % Get Values by matrix multiplication
-Zval = M*Z;
+Z2 = M*Z(:);
+
+% Reshape to original matrix
+Z2 = reshape(Z2,nsize);
 
 % Convert NaN's to zeros
 M(isnan(M))=0.0; 
@@ -54,24 +63,27 @@ fig.Units = 'inches';
 fig.Position= [2,2,9,4];
 
 % Original
-subplot(1,2,1); grid on; hold on;
-pp(1) = plot(xref,Z,'k.-');
+subplot(1,2,1); 
+pp(1) = surf(X,Y,Z);
+view(0,90);colorbar;
 title('Original')
 xlabel('X')
-ylabel('F')
+ylabel('Y')
+caxis([ min(min(Z)) , max(max(Z)) ])
 xlim(  [ min( xref ), max( xref )  ] )
-ylim(  [ min( Z    ), max( Z    )  ] )
+ylim(  [ min( yref ), max( yref )  ] )
 
 % Shifted
-subplot(1,2,2); grid on; hold on;
-pp(2) = plot(xref,Zval,'k.-');
+subplot(1,2,2); 
+pp(2) = surf(X,Y,Z2);
+view(0,90);colorbar;
+colormap gray;
 title('Shifted')
 xlabel('X')
-ylabel('F')
+ylabel('Y')
+caxis( [ min(min(Z)) , max(max(Z)) ] )
 xlim(  [ min( xref ), max( xref )  ] )
-ylim(  [ min( Z    ), max( Z    )  ] )
-
-% Bold
+ylim(  [ min( yref ), max( yref )  ] )
 set(findobj(gcf,'type','axes'),'FontName','Arial',...
      'FontSize',10,'FontWeight','Bold');
  
@@ -86,6 +98,6 @@ fig.Position= [2,2,5,5];
 % plot
 spy(M)
 title('M Interpolation Matrix')
-xlabel('Nr Reference Values')
-ylabel('Nq Query Values')
+xlabel('N_x x N_y Reference Values')
+ylabel('N_x x N_y Query Values')
 

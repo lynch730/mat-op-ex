@@ -1,7 +1,7 @@
 
 close all
 clear; clc;
-addpath('core/');
+addpath('../../source/')
 
 % This script demonstrates the matrix extraction method of solving trapz
 % using matrix methods, applied to a problem of 2D grids. 

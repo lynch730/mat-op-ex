@@ -1,7 +1,7 @@
 
 close all
 clear; clc;
-addpath('core/');
+addpath('../../source/')
 
 % This script demonstrates the matrix extraction method of solving interp1
 % Currently this is limited to only linear or cubic interpolation
