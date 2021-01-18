@@ -10,11 +10,11 @@ Mat-Op-Ex functions are designed to be analogous to their conventional counterpa
 ### Function List
 
   - **Interpolation**
-    - `interp1_matrix(X,Xq)` - 1D interp on 1D mesh
-    - `interp2_matrix(X,Y,Xq,Yq)` - 1-2D interp on 2D mesh
+    - `M=interp1_matrix(X,Xq)` - 1D interp on 1D mesh
+    - `M=interp2_matrix(X,Y,Xq,Yq)` - 1-2D interp on 2D mesh
   - **Integration**
-    - `trapz_matrix1(X)` - 1D int. on 1D mesh
-    - `trapz_matrix2(X,Y,DIM)` - 1D int. on a 2D mesh 
+    - `M=trapz_matrix1(X)` - 1D int. on 1D mesh
+    - `M=trapz_matrix2(X,Y,DIM)` - 1D int. on a 2D mesh 
   - **Auxiliary**
     - `mesh_type` - determines if X/Y inputs are invalid, vectors, *meshgrid* matrices, or *ndgrid* matrices
 
