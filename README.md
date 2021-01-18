@@ -21,17 +21,17 @@ Mat-Op-Ex functions are designed to be analogous to their conventional counterpa
 ### Example Test Figures
 **(A)** An example spy of the *trapz_matrix2* outout for a 2D grid, applied to either X or Y dimension. 
 
-> > <img src="https://github.com/lynch4815/mat-op-ex/blob/main/figures/test_trapz2_base_spy.png" alt="p1" width="600"/>
+> <img src="https://github.com/lynch4815/mat-op-ex/blob/main/figures/test_trapz2_base_spy.png" alt="p1" width="600"/>
 
-**(B)** An example of the stencils used in bi-cubic interpolation in *interp2_matrix*, and the associated deviations from MATLAB interp2 with the cubic method.
+**(B)**  An example of the stencils used in bi-cubic interpolation in *interp2_matrix*, and the associated deviations from MATLAB interp2 with the cubic method.
 
 > <img src="https://github.com/lynch4815/mat-op-ex/blob/main/figures/test_interp2_base.png" alt="p1" width="600"/>
 
 ## Current Status
 Mat-Op-Ex is currently tested to support 1D and 2D interpolation (nearest, linear, and cubic) and integration (trapz, simpsons rule) on 1-D and 2-D based grids that are evenly spaced along each axis (i.e. generated with [ndgrid](https://www.mathworks.com/help/matlab/ref/ndgrid.html)). All functions test within machine precision of MATLAB functions, except for the cubic interpolation on the edges of the domain, where a difference in boundary conditions incur a typical error of <1%. 
 
-Because the matrix operators depend heavily on the grid makeup, Mat-Op-Ex functions are less generalized than conventional functions, and expansion to higher dimensions (such as with [interpn](https://www.mathworks.com/help/matlab/ref/interpn.html), are not straightforward. Mat-Op-Ex is similar to [FUNC2MAT](https://www.mathworks.com/matlabcentral/fileexchange/44669-func2mat-convert-linear-function-to-matrix), but far more efficient in generating the matricies. 
+Because the matrix operators depend heavily on the grid makeup, Mat-Op-Ex functions are less generalized than conventional functions, and expansion to higher dimensions (such as with [interpn](https://www.mathworks.com/help/matlab/ref/interpn.html), are not straightforward. Mat-Op-Ex is similar in concept [FUNC2MAT](https://www.mathworks.com/matlabcentral/fileexchange/44669-func2mat-convert-linear-function-to-matrix), but implements the schemes natively and is far more efficient. 
 
 ## Motivation
-This project arose from the need to calculate the stability matrix for a certain set of discretized ODE's where interpolation and spatial integration played a critical role. In addition to furnishing the full matrix operator, the pure matrix form enabled highly-efficient solutions, especially using [gpuArrays](https://www.mathworks.com/help/parallel-computing/run-matlab-functions-on-a-gpu.html) (which to present knowledge, must recompute stencils for interpolation and integration routines, unlike the cpu-based [griddedInterpolant](http://health.ahs.upei.ca/KubiosHRV/MCR/toolbox/matlab/demos/html/griddedInterpolantDemo.html)). Any ideas to improve or expanded on this technique would be greatly welcomed. 
+This project arose from the need to calculate the stability matrix for a certain set of discretized ODE's where interpolation and spatial integration played a critical role. In addition to furnishing the full matrix operator, the pure matrix form enabled highly-efficient solutions, especially using [gpuArrays](https://www.mathworks.com/help/parallel-computing/run-matlab-functions-on-a-gpu.html) (which to present knowledge, must recompute stencils for each interpolation and integration call, unlike the cpu-based [griddedInterpolant](http://health.ahs.upei.ca/KubiosHRV/MCR/toolbox/matlab/demos/html/griddedInterpolantDemo.html), which can store grid data). Any ideas to improve or expanded on this technique would be greatly welcomed. 
 
