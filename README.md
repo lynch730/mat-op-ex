@@ -21,11 +21,11 @@ Mat-Op-Ex functions are designed to be analogous to their conventional counterpa
 ### Example Test Figures
 **(A)** A demonstration of the speed test for Mat-Op-Ex using *trapz_matrix2* compared to common alternatives. Mat-Op-Ex on a CPU is the fastest option on small grids, and Mat-Op-Ex on a consumer GPU is the fastest on large grids (~3.5x faster than interp2).
 
-> <img src="https://github.com/lynch4815/mat-op-ex/blob/main/figures/speedup.png" alt="p1" width="600"/>
+> <img src="https://github.com/lynch4815/mat-op-ex/blob/main/figures/speedup.png" alt="p1" width="800"/>
 
 **(B)**  An example of the stencils used in bi-cubic interpolation in *interp2_matrix*, and the associated deviations from MATLAB interp2 with the cubic method.
 
-> <img src="https://github.com/lynch4815/mat-op-ex/blob/main/figures/test_interp2_base.png" alt="p1" width="600"/>
+> <img src="https://github.com/lynch4815/mat-op-ex/blob/main/figures/test_interp2_base.png" alt="p1" width="800"/>
 
 ## Current Status
 Mat-Op-Ex is currently tested to support 1D and 2D interpolation (nearest, linear, and cubic) and integration (trapz, simpsons rule) on 1-D and 2-D based grids that are evenly spaced along each axis (i.e. generated with [ndgrid](https://www.mathworks.com/help/matlab/ref/ndgrid.html)). All functions test within machine precision of MATLAB functions, except for the cubic interpolation on the edges of the domain, where a difference in boundary conditions incur a typical error of <1%. 
