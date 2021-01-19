@@ -12,7 +12,7 @@ addpath('../../source/')
 
 %% Reference Data Setup
 
-% Get reference data
+% Set number of grid points
 nx = 25;
 
 % Define Grid Limits
@@ -42,10 +42,10 @@ xquery(4,1) = xref(4);
 
 %% Getting Interpolations from matrix method
 
-% Get Sparse Matrix of Remap Coefficients
+% matrix operator
 M = interp1_matrix( xref, xquery, interp_type );
 
-% Get Values by matrix multiplication
+% interpolation by matrix multiplication
 Zval = M*Z;
 
 

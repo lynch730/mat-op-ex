@@ -12,11 +12,11 @@ addpath('../../source/')
 
 %% Reference Data Setup
 
-% Get reference data
+% Number of grid points
 nx = 18;
 ny = 20;
 
-% Define Grid Limits
+% Define Grid
 xref(:,1) = linspace( -1.0, 1.0, nx );
 yref(:,1) = linspace( -1.0, 1.2, ny ); 
 
@@ -65,14 +65,12 @@ yquery(7,1) = yref(end-4);
 
 %% Getting Interpolations from matrix method
 
-% Get size for reshaping after
+% Get original size for reshaping after
 nsize = size(xquery);
 
-% Get Sparse Matrix of Remap Coefficients
-tic
+% Get Sparse Matrix of interp2 operator
 [M,xref_out,yref_out] = interp2_matrix( X, Y, xquery, ...
                                         yquery, interp_type );
-toc
 
 % Transpose if using meshgrid
 mtype = mesh_type( X, Y );
