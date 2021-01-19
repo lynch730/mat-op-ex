@@ -19,9 +19,9 @@ Mat-Op-Ex functions are designed to be analogous to their conventional counterpa
     - `mesh_type` - determines if X/Y inputs are invalid, vectors, *meshgrid* matrices, or *ndgrid* matrices
 
 ### Example Test Figures
-**(A)** An example spy of the *trapz_matrix2* output for a 2D grid, applied to either X or Y dimension that reduced the vectorized surface function to order `N=1`. 
+**(A)** A demonstration of the speed test for Mat-Op-Ex using *trapz_matrix2* compared to common alternatives. Mat-Op-Ex on a CPU is the fastest option on small grids, and Mat-Op-Ex on a consumer GPU is the fastest on large grids (~3.5x faster than interp2).
 
-> <img src="https://github.com/lynch4815/mat-op-ex/blob/main/figures/test_trapz2_base_spy.png" alt="p1" width="600"/>
+> <img src="https://github.com/lynch4815/mat-op-ex/blob/main/figures/speedup.png" alt="p1" width="600"/>
 
 **(B)**  An example of the stencils used in bi-cubic interpolation in *interp2_matrix*, and the associated deviations from MATLAB interp2 with the cubic method.
 
