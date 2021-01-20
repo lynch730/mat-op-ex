@@ -292,7 +292,7 @@ function [ M, xout, yout ] = interp2_matrix( X, Y, Xq, Yq, varargin )
     
     % Now cull any C's that correspond to bad indices
     % (and replace with edgeval)
-    W(:,:,idx_null) = 0.0;
+    W(:,:,idx_null) = NaN;
     
     % Reshape C to be Ns x Nq
     W = reshape(W, [Ns, Nq] );
