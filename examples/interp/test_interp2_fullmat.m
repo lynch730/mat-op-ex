@@ -44,7 +44,7 @@ yquery = Y - 0.1*range(yref);
 nsize = size(xquery);
 
 % Get Sparse Matrix of Remap Coefficients
-M = interp2_matrix( X, Y, xquery, yquery, interp_type );
+[ M, ~, ~, ob_pntr ] = interp2_matrix( X, Y, xquery, yquery, interp_type );
 
 % Get Values by matrix multiplication
 Z2 = M*Z(:);
@@ -52,8 +52,8 @@ Z2 = M*Z(:);
 % Reshape to original matrix
 Z2 = reshape(Z2,nsize);
 
-% Convert NaN's to zeros
-M(isnan(M))=0.0; 
+% Apply Constant Condition on Out-of-bounds queries
+Z2( ob_pntr ) = mean(mean(Z)); 
 
 %% Plot Before and After
  

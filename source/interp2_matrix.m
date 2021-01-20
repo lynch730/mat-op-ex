@@ -1,11 +1,12 @@
-function [ M, xout, yout ] = interp2_matrix( X, Y, Xq, Yq, varargin )
+function [ M, xout, yout, ob_pntr ] = interp2_matrix( X, Y, Xq, Yq, varargin )
 %% INTERP2_MATRIX, RECOVERING THE MATRIX FROM INTERP2 
 %     
 %     M = interp2_matrix(X,Y,Xq,Yq) returns the underlying matrix M
 %     representing the interp2 operator for a known X/Y grid and set of a
 %     set of query points Xq/Yq. Matrix M is of size M(Nq,Nr), with Nq rows
 %     of vectorized queries Xq(:)/Yq(:), and Nr columns of vectorized
-%     reference grid points X(:)/Y(:).
+%     reference grid points X(:)/Y(:). Out-of-Bounds queries are left
+%     sparse in M (See ob_pntr).
 %     
 %     M can subsequently be used to obtain a vector P(Nq,1) of
 %     Nq interpolation queries for a reference function F over X and Y:
@@ -39,11 +40,14 @@ function [ M, xout, yout ] = interp2_matrix( X, Y, Xq, Yq, varargin )
 %       'nearest' - nearest neighbor interpolation 
 %       'linear'  - bi-linear interpolation 
 %       'cubic'   - bi-cubic convolution interpolation
-
+%
 %    [ M, XOUT, YOUT ] = interp2_matrix(...) returns the 1D X/Y position
 %    arrays of each column in M. xout and yout are dimension Nr, are
 %    equivalent to vectorizing an X/Y mesh created from ndgrid.
-%
+%    
+%    [ M, XOUT, YOUT, OB_PNTR ] = interp2_matrix(...) returns an array of
+%    the M matrix's row indicies corresponding to query points that are out
+%    of bounds. These rows are left sparse. 
 %
 %% SOLUTION TECHNIQUE & SOURCE
 %    
@@ -292,7 +296,7 @@ function [ M, xout, yout ] = interp2_matrix( X, Y, Xq, Yq, varargin )
     
     % Now cull any C's that correspond to bad indices
     % (and replace with edgeval)
-    W(:,:,idx_null) = NaN;
+    W(:,:,idx_null) = 0.0; % sparse wont read zeros!
     
     % Reshape C to be Ns x Nq
     W = reshape(W, [Ns, Nq] );
@@ -333,8 +337,6 @@ function [ M, xout, yout ] = interp2_matrix( X, Y, Xq, Yq, varargin )
     M = sparse( I, J, W, Nq, Nr );
     
     %% Alternative Output
-        % Now want to also print out the pointer matrices that map a given
-        % global i,j to the  
         
     % Define Output X and Y reference arrays, in the implied ndgrid form 
     % used internally
@@ -355,5 +357,12 @@ function [ M, xout, yout ] = interp2_matrix( X, Y, Xq, Yq, varargin )
         
     end
     
+    % Define out-of-bounds pointer
+    if ( nargout>3 )
+        
+        % Get inidices of out-of-bounds queries, vector form
+        ob_pntr(:,1) = find(idx_null);
+        
+    end
+    
 end
-

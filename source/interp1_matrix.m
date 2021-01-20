@@ -1,4 +1,4 @@
-function [ M ] = interp1_matrix( xref, Xq, varargin )
+function [ M, ob_pntr ] = interp1_matrix( xref, Xq, varargin )
 %% INTERP1_MATRIX, RECOVERING THE MATRIX FROM INTERP1
 %     
 %     M = interp1_matrix(xref,Xq) returns the underlying matrix M
@@ -31,6 +31,10 @@ function [ M ] = interp1_matrix( xref, Xq, varargin )
 %       'nearest' - nearest neighbor interpolation 
 %       'linear'  - linear interpolation 
 %       'cubic'   - cubic convolution interpolation
+%
+%    [ M, OB_PNTR ] = interp1_matrix(...) returns an array of
+%    the M matrix's row indicies corresponding to query points that are out
+%    of bounds. These rows are left sparse. 
 %    
 %% SOLUTION TECHNIQUE & SOURCE
 %    
@@ -220,7 +224,7 @@ function [ M ] = interp1_matrix( xref, Xq, varargin )
     
     % Now cull any C's that correspond to bad indices
     % (and replace with edgeval)
-    W(:,idx_null) = NaN;
+    W(:,idx_null) = 0.0;
     
     % Apply a symmetry condition to reference points that 
     % lie outside the domain. This assumes zero slope at domain edge
@@ -243,6 +247,15 @@ function [ M ] = interp1_matrix( xref, Xq, varargin )
     
     % Create the sparse array
     M = sparse( I, i_glbl_sten, W, Nq, Nr );
+    
+    %% Alternative Output
+        
+    % Return pointer array of indicies in rows of M that were nullfied due
+    % to out-of-bounds queries
+    if ( nargout>1 )
+        ob_pntr(:,1) = find(idx_null);
+    end
+    
     
 end
 

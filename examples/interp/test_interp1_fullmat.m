@@ -38,13 +38,13 @@ xquery = xref - 0.1*range(xref);
 nsize = size(xquery);
 
 % Get Sparse Matrix of Remap Coefficients
-M = interp1_matrix( xref, xquery, interp_type , 35.0);
+[M, ob_pntr] = interp1_matrix( xref, xquery, interp_type , 35.0);
 
 % Get Values by matrix multiplication
 Zval = M*Z;
 
-% Convert NaN's to zeros
-M(isnan(M))=0.0; 
+% Apply a condition for out-of-bounds query
+Zval( ob_pntr ) = Zval(  find( (Zval>0.0), 1 ) ); 
 
 %% Plot Before and After
  
