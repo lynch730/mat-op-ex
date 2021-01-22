@@ -41,6 +41,27 @@ function [ M, xout, yout, ob_pntr ] = interp2_matrix( X, Y, Xq, Yq, varargin )
 %       'linear'  - bi-linear interpolation 
 %       'cubic'   - bi-cubic convolution interpolation
 %
+%     M = interp2_matrix(X,Y,Xq,Yq,CUBIC_BC_X,CUBIC_BC_Y) provides edge
+%     conditions for each wall of the X/Y mesh for cubic interpolation
+%     where the stencil reaches outside the mesh (but the query point does
+%     not). These conditions are the indices on the X/Y mesh that each edge
+%     should use as the 4th point stencil point. If not applied, an
+%     extrapolation is used by 2nd order finite difference.
+%
+%     cubic_bc_x and cubic_bc_y must both be provided, and be of sizes
+%     (Nx,4) and (Ny,4) respectivley. Must both be integer matricies.
+%     cubic_bc_x covers the top and bottom walls (Y=0, Y=Ymax), and
+%     cubic_bc_y covers the left and right walls (X=0, X=Xmax). The 4
+%     columns in each correspond to the i/j pairs for each wall. For
+%     example cubic_bc_x contains columns [i_top(1:nx,1), j_top(1:nx,1),
+%     i_bot(1:nx,1), j_bot(1:nx,1)]. When both the i and j columns for any
+%     wall contain all zeros, that condition is ignored and extrapolation
+%     is used for that wall.
+%     
+%     Typical usage is to impose a zero-slope-like boundary condition, or
+%     if using a non-cartesian mesh, mapping one edge to another. This
+%     usage is rare, and most users should probably just extrapolate.
+%
 %    [ M, XOUT, YOUT ] = interp2_matrix(...) returns the 1D X/Y position
 %    arrays of each column in M. xout and yout are dimension Nr, are
 %    equivalent to vectorizing an X/Y mesh created from ndgrid.
