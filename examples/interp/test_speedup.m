@@ -1,24 +1,34 @@
 ﻿
 close all
 clear; clc;
-addpath('../../source/')
+if (ispc)
+   error('If using windows, add path to source here')
+%   addpath('...\source\')
+else
+   addpath('../../source/')
+end
 
 % This script tests the speedup of interp2_matrix for 2D matrix
 % interpolation on a fixed grid, relative to interp2, griddedInterpolant,
-% and with a GPU, if available. Two sets of queries are tested, one where
-% query points are shifted by uniform amounts from the reference grid ("shift"), and
-% one where they are more randomized ("scatter")
+% and with a GPU, if available. The script tests a range of grid sizes,
+% meant to show the relative CPU/GPU scaling. This will take a long time,
+% depending on the hardware and max grid size. Single GPU memory limits may
+% require chaging max grid size
 
 %% Hardcode CPU/GPU info
 cpu_name = 'Intel i7-5820K';
 gpu_name = 'NVIDIA GTX 1070';
 
-% Number of iterations to time
+% Number of iterations to time ( more will have smoother data )
+% More iteraetions will favor schemes that don't remesh. 
 ni = 1000;
+min_grid = 10;
+max_grid = 600;
 
-% Loop number of grid points trials
+% Loop number of grid points trials (log-spaced)
 ns = 20;
-nsa = round(linspace(10,600,ns));
+nsa = linspace( log10(min_grid), log10(max_grid) , ns );
+nsa = round(10.0.^nsa);
 
 % Create Timer
 timer = zeros(6,ns); 
@@ -243,39 +253,98 @@ fig.Units = 'inches';
 fig.Position= [2,2,9,5];
    
 % Title
-title( { 'Time of Execution (Relative to interpn at each grid size) ',...
-         sprintf('%i Iterations',[ni] ),...
+title( { strcat( 'Time of Execution (Relative to interpn at each grid size) ',...
+         sprintf(', %i Iterations',[ni] ) ),...
          ['CPU = ',cpu_name,', GPU = ',gpu_name]} )
 
-% Plot CPU's
-for i=1:4
+% Plot cases
+for i=1:6
     pp(i)=plot(nsa.*nsa,timer_relative(i,:),'.-',...
-           'LineWidth',1.5,'MarkerSize',15);
+           'LineWidth',1.75,'MarkerSize',12);
 end
 
-% Plot GPU's
-for i=5:6
-    pp(i)=plot(nsa.*nsa,timer_relative(i,:),'.--',...
-           'LineWidth',1.5,'MarkerSize',15);
-end
+% Set GPUs to dash
+pp(5).LineStyle = '--';
+pp(6).LineStyle = '--';
 
-xlim( [min(nsa.*nsa), max(nsa.*nsa)] )
+% Set Colors 
+matop_color   = [0.1058 0.3411 0.502];
+interp2_color = [0.478  0.294  0.294]; 
+ginter_color  = [0.435  0.529  0.428];
+interpn_color = [0.502  0.502  0.502];
+
+% Recolor
+pp(1).Color = interpn_color; 
+pp(2).Color = interp2_color;
+pp(3).Color = ginter_color; 
+pp(4).Color = matop_color;
+pp(5).Color = interp2_color; 
+pp(6).Color = matop_color; 
+
+% Get handle of the current axis
+ax1 = gca;
+
+% Set limits and scale of grid node axis
+minx = nsa(1)*nsa(1);
+maxx = nsa(end)*nsa(end);
+xlim( [minx, maxx] )
+set(ax1,'XScale','log')
 
 % % Legend
-legend('interpn         - CPU',...
+legend(ax1,'interpn         - CPU',...
        'interp2         - CPU',...
        'grid.Interp.  - CPU',...
        'MAT-OP-EX  - CPU',...
        'interp2        - GPU',...
-       'MAT-OP-EX  - GPU')
+       'MAT-OP-EX  - GPU',...
+       'Location','NorthWest')
    
 % Label
-xlabel('Grid Nodes (Nx*Ny)')
-ylabel('Relative Time')
-set(gca,'XScale','log')
-     
+xlabel(ax1,'Grid Nodes (Nx*Ny)')
+ylabel(ax1,'Relative Time')
+
+% Configure First axes for space for two more
+pos = ax1.Position;
+yshift = pos(1);
+ax1.Position(2) = ax1.Position(2) + 2*yshift;
+ax1.Position(4) = ax1.Position(4) - 2*yshift;
+
+%% Create Second Axes - Grid Size in Mb
+ax2 = axes('color','none');
+ax2.Position = pos;
+ax2.Position(2) = pos(2) + yshift;
+ax2.Position(4) = 0.01;
+
+% Compute estimates of data requirements for conventional interp2
+if (strcmp(interp_type,'cubic')==1)
+   mult = 16; % 4x4 stencil
+else % linear, stencil is 4
+   mult = 4;
+end
+
+% Compute Sizes (assuming matricies: Zq,Yq,F, linear X/Y)
+minx_M = ( 3*8*minx*mult + 2*min_grid )/1e6;
+maxx_M = ( 3*8*maxx*mult + 2*max_grid )/1e6;
+
+% Define the 2nd X-axis
+xlim([ minx_M, maxx_M])
+xlabel(ax2,'Interp2/Interpn Memory Estimate (Mb)')
+ax2.XColor = interp2_color;
+
+%% Create Third Axes - Size of Mat-Op-Ex Operator
+ax3 = axes('color','none');
+ax3.Position = pos;
+ax3.Position(4) = 0.01;
+
+minx_M = minx_M + ( 16*minx*mult+8*minx )/1e6;
+maxx_M = maxx_M + ( 16*maxx*mult+8*maxx )/1e6;
+
+% Define the 2nd X-axis
+xlim([ minx_M, maxx_M])
+xlabel(ax3,'MAT-OP-EX Memory Estimate (Mb)')
+ax3.XColor = matop_color;
+
+ % Bold Everything
  set(findobj(gcf,'type','axes'),'FontName','Arial',...
 'FontSize',10,'FontWeight','Bold');
-
-
 

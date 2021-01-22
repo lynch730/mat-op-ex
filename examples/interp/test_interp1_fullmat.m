@@ -1,7 +1,12 @@
 ﻿
 close all
 clear; clc;
-addpath('../../source/')
+if (ispc)
+   error('If using windows, add path to source here')
+%   addpath('...\source\')
+else
+   addpath('../../source/')
+end
 
 % This script demonstrates the matrix extraction method on an interp1 case
 % where the entire line is shifted in the X-axis by 1/10 the X range.
