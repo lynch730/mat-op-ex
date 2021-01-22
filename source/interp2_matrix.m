@@ -41,6 +41,27 @@ function [ M, xout, yout, ob_pntr ] = interp2_matrix( X, Y, Xq, Yq, varargin )
 %       'linear'  - bi-linear interpolation 
 %       'cubic'   - bi-cubic convolution interpolation
 %
+%     M = interp2_matrix(X,Y,Xq,Yq,CUBIC_BC_X,CUBIC_BC_Y) provides edge
+%     conditions for each wall of the X/Y mesh for cubic interpolation
+%     where the stencil reaches outside the mesh (but the query point does
+%     not). These conditions are the indices on the X/Y mesh that each edge
+%     should use as the 4th point stencil point. If not applied, an
+%     extrapolation is used by 2nd order finite difference.
+%
+%     cubic_bc_x and cubic_bc_y must both be provided, and be of sizes
+%     (Nx,4) and (Ny,4) respectivley. Must both be integer matricies.
+%     cubic_bc_x covers the top and bottom walls (Y=0, Y=Ymax), and
+%     cubic_bc_y covers the left and right walls (X=0, X=Xmax). The 4
+%     columns in each correspond to the i/j pairs for each wall. For
+%     example cubic_bc_x contains columns [i_top(1:nx,1), j_top(1:nx,1),
+%     i_bot(1:nx,1), j_bot(1:nx,1)]. When both the i and j columns for any
+%     wall contain all zeros, that condition is ignored and extrapolation
+%     is used for that wall.
+%     
+%     Typical usage is to impose a zero-slope-like boundary condition, or
+%     if using a non-cartesian mesh, mapping one edge to another. This
+%     usage is rare, and most users should probably just extrapolate.
+%
 %    [ M, XOUT, YOUT ] = interp2_matrix(...) returns the 1D X/Y position
 %    arrays of each column in M. xout and yout are dimension Nr, are
 %    equivalent to vectorizing an X/Y mesh created from ndgrid.
@@ -102,17 +123,56 @@ function [ M, xout, yout, ob_pntr ] = interp2_matrix( X, Y, Xq, Yq, varargin )
        method = varargin{1};
     end
     
+    % Read in custom BC's for cubic case
+    cubic_bc_x = []; % default to extrapolation
+    cubic_bc_y = [];
+    if ( nargin == 7 )
+       cubic_bc_x = varargin{2};
+       cubic_bc_y = varargin{3};
+    elseif (nargin == 6 ) % not enough supplied
+        error('If applying cubic boundary conditions, need two arrays');
+    end    
+    
     %% Check the Interpolation Method
     
     % Fork interp string type
     if     strcmpi( method, 'nearest' )
        n_order = 0;
-    elseif     strcmpi( method, 'linear'  )
+    elseif strcmpi( method, 'linear'  )
        n_order = 1;
     elseif strcmpi( method, 'cubic'   )
        n_order = 2;
     else
         error('Bad Interp String, must be cubic or linear')
+    end
+    
+    %% Check any cubic boundary conditions
+    
+    % Check to make sure cubic_bc's were correctly supplied
+    if ( ~isempty(cubic_bc_x) && n_order~=2  )
+        error('Cubic boundary conditions given when not using METHOD cubic')
+        
+    % Remaining tests are for if something is given (not empty)
+    elseif ( ~isempty(cubic_bc_x) && ~isempty(cubic_bc_y) )
+        
+        % Now test if both are not empty
+        if ( isempty(cubic_bc_x) || isempty(cubic_bc_y)  )
+            error('One boundary condition is missing')
+        
+        % Test if dimensions and types are correct
+        elseif( ~ismatrix(cubic_bc_x) )
+            error('Cubic boundary condition not a matrix of integers') 
+            
+        % Check outter sizes
+        elseif ( size(cubic_bc_x,2) ~= 4  || ...
+                 size(cubic_bc_y,2) ~= 4 )
+            error('I/J not of size Nx4')
+            
+        end
+        
+    else % ensure no BC's are used
+        cubic_bc_x = [];
+        cubic_bc_y = [];
     end
     
     %% Pre-process the Query Data
@@ -153,57 +213,82 @@ function [ M, xout, yout, ob_pntr ] = interp2_matrix( X, Y, Xq, Yq, varargin )
     %  (this is also the number of columns in M and rows in F)
     Nr = nx_ref*ny_ref;
     
-    % Get cell width, note: cubic arrays must be uniform 
-    dx = diff( xref ); 
-    dy = diff( yref );
-    
-    % Tack on the last cell 
-    % ( this isn't used b/c points using it should be culled)
-    dx( end + 1 ) = dx( end );
-    dy( end + 1 ) = dy( end );
-    
-    %% Reference Array Checks
-    
-    % Make sure points don't overlap
-    if any( dx==0 ) || any( dy==0 )
-        error('grid not distinct')
-    end
-    
-    % Make sure grids are sorted
-    if ~issorted( xref ) || ~issorted( yref )     
-        error('grid is not sorted')
-    end
+    % Get cell width, already checked in meshgrid
+    dx = xref(2) - xref(1); 
+    dy = yref(2) - yref(1);
     
     %% Global Indices & Local Coordinates
     
-    % Get the Left-Hand Side index, points to 
-    % where target resides in reference grid
-    % (i.e. if xref(4:5)=[0.4,0.9] and xarray=0.7, returns ix = 4 )
+    % Get the Left-Hand Side index for each query,
+    % where reference point resides in the reference grid
+    % (e.g. if xref(4:5)=[0.4,0.9] and xarray=0.7, returns ix = 4 )
     % [~,~,~, i_glbl_pntr, j_glbl_pntr ] = histcounts2( Xq, Yq, xref, yref );
     [~,~,i_glbl_pntr ] = histcounts( Xq, xref );
     [~,~,j_glbl_pntr ] = histcounts( Yq, yref );
     
     % Determine subset of indices that should not be used 
-    %   ( histcounts return 0 for out of bounds)
+    % because they are out of bounds (i.e. histcounts return 0 )
     idx_null = ( i_glbl_pntr == 0 | j_glbl_pntr ==0 );
     
-    % Give the bad cases an arbitrary valid LHS indices
-    % (this preserves the target-array indices, should not 
-    %  really affect performance if bad cases are rare)
+    % Give the bad cases an arbitrary but valid LHS index,
+    %   (if we eliminated themm, we'd lose 1:1 mapping of glbl_pntr
+    %   indicies to the query matrix indicies. This simplifies the code,
+    %   but at the cost of wasting FLOPS on out-of-bounds queries that
+    %   could be eliminated. These should be rare though, but if they are
+    %    signficant, the user can optimzie the Xq/Yq entries to avoid this
+    %    problem)
     i_glbl_pntr( idx_null ) = 1;
     j_glbl_pntr( idx_null ) = 1;
     
     % Get the relative position in the [0,1x0,1] reference cell
-    x(1,:) = ( Xq - xref( i_glbl_pntr ) ) ./ dx( i_glbl_pntr );
-    y(1,:) = ( Yq - yref( j_glbl_pntr ) ) ./ dy( j_glbl_pntr );
+    x(1,:) = ( Xq - xref( i_glbl_pntr ) ) ./ dx;
+    y(1,:) = ( Yq - yref( j_glbl_pntr ) ) ./ dy;
     
-    %% Interpolation Coefficients
+    %% Cubic BC Handeling
+    %  Need to supply 4 logic gates for how to handle cubic BC's on each
+    %  wall, either extrapolate the 4th point from the other three
+    %  (essentially reducing the stencil to size 3), or use a user supplied
+    %  set of points (e.g. apply a boundary condition of some sort )
+    
+    % If cubic...
+    if ( n_order==2 )
+        
+        % Default use extrapolation method (flase)
+        bc_flag = false(4,1); % 1-4 are top, bot, left, right 
+        
+        % Build up cubic BC's, if they have been supplied and not
+        % previously emptied
+        if ( ~isempty( cubic_bc_x ) )
+            
+            % Create test of which walls to apply, turns true if not all
+            % zero
+            bc_flag(1) = max( cubic_bc_x(:,1) ) > 0;
+            bc_flag(2) = max( cubic_bc_x(:,3) ) > 0;
+            bc_flag(3) = max( cubic_bc_y(:,1) ) > 0;
+            bc_flag(4) = max( cubic_bc_y(:,3) ) > 0;        
+            
+            % check if any user-supplied BC's contain invalid indicies
+            if    ( min([cubic_bc_x(:,1); cubic_bc_x(:,2)])<1 && bc_flag(1))
+                error('Top BCs contain negative or zero indicies')
+            elseif (min([cubic_bc_x(:,3);cubic_bc_x(:,4)])<1 && bc_flag(2))
+                error('Bot BCs contain negative or zero indicies')
+            elseif (min([cubic_bc_y(:,1);cubic_bc_y(:,2)])<1 && bc_flag(3))
+                error('Left BCs contain negative or zero indicies')
+            elseif (min([cubic_bc_y(:,3);cubic_bc_y(:,4)])<1 && bc_flag(4))
+                error('Right BCs contain negative or zero indicies')
+            end
+            
+        end
+        
+    end
+    
+    %% Interpolation Coefficients - where the magic happens!
     % Need to get a square matrix C of coefficients that correspond to the
     % weights of the function points surrounding any given target x/y
     % this is stored in the inner index (rows) for each x/y target (column)
     %   Vectors A(x) and B(y) store the x/y-based weights that form C 
     
-    % Linear (2x2 kernel) or nearest
+    % Linear (2x2 kernel) or nearest (treated as linear with binary weights)
     if ( n_order<2 )
         
         % if nearest, just round x and y
@@ -221,7 +306,8 @@ function [ M, xout, yout, ob_pntr ] = interp2_matrix( X, Y, Xq, Yq, varargin )
         W(1,2,:) = (1.0-x).*y;
         W(2,2,:) = x.*y;
         
-        % Indices of the 2x2 kernel relative to the ix/iy global coordinate
+        % Generic indices of the 2x2 kernel relative to the "center"
+        % coordinate (the point(s) to the LHS of the query point)
         i_sten_mat(:,1) = [1:2,1:2]-1;
         j_sten_mat(:,1) = [1,1,2,2]-1;
         
@@ -254,38 +340,77 @@ function [ M, xout, yout, ob_pntr ] = interp2_matrix( X, Y, Xq, Yq, varargin )
         % Construct Matrix
         W = B.*A;
         
-        % Apply 2nd order difference to extrapolate the outer edges of the
-        % stencil when they are not available. This treatment ignores the
-        % corners of the matrix. Deviations from interp2 are negligible,
-        % less than <1% on average. 
+        %% Apply Cubic BC's
+        %   For each boundary, if not using user supplied, apply 2nd order
+        %   difference to extrapolate. Remember we don't know the function
+        %   value, we're just adjusting the weights to "zero" the weight of
+        %   the out-of-bounds term and redistribute it to the others, under
+        %   the condition that they can represent that OOB value by finite
+        %   difference. This treatment ignores the corners of the matrix!
+        %
+        %   NOTE: pay close attention the indicies below. They control how
+        %   the 2nd order, first derivative stencil is applied!
+        %
+        %   For each wall, we also want to obtain a pointer array (*_idx)
+        %   to tell us where these points exist in the query arrays. We use
+        %   them either here, or later if we are using user-supplied
         
-        % Apply Boundary condition on left wall
-        wall = (i_glbl_pntr == 1);
-        W(2,:,wall) = W(2,:,wall) + 2.5*W(4,:,wall);
-        W(3,:,wall) = W(3,:,wall) - 2.0*W(4,:,wall);
-        W(4,:,wall) = W(4,:,wall) + 0.5*W(4,:,wall);
-        W(1,:,wall) = 0.0;
+        % Get pointer arrays. Recall we don't know what points the user is
+        % going to query, nor where those queries will end up. So we have
+        % to search the glbl_pnter for queries with LHS coordinates that
+        % are "valid" (within the mesh), but sit close enough to have an
+        % OOB value in their stencil.
+        top_idx(:,1)   = find( j_glbl_pntr == ny_ref-1) ;
+        bot_idx(:,1)   = find( j_glbl_pntr == 1 );
+        left_idx(:,1)  = find( i_glbl_pntr == 1 );
+        right_idx(:,1) = find( i_glbl_pntr == nx_ref-1 );
         
-        % Apply Boundary condition on right wall
-        wall = (i_glbl_pntr == Nr-1);
-        W(1,:,wall) = W(1,:,wall) + 0.5*W(4,:,wall);
-        W(2,:,wall) = W(2,:,wall) - 2.0*W(4,:,wall);
-        W(3,:,wall) = W(3,:,wall) + 2.5*W(4,:,wall);
-        W(4,:,wall) = 0.0;
+        % Test and Apply on top wall,
+        if( ~bc_flag(1) )
+            W(:,1,top_idx) = W(:,1,top_idx) + 0.5*W(:,4,top_idx);
+            W(:,2,top_idx) = W(:,2,top_idx) - 2.0*W(:,4,top_idx);
+            W(:,3,top_idx) = W(:,3,top_idx) + 2.5*W(:,4,top_idx);
+            W(:,4,top_idx) = 0.0;
+        end
         
-        % Apply Boundary condition on bottom wall
-        wall = (j_glbl_pntr == 1);
-        W(:,2,wall) = W(:,2,wall) + 2.5*W(:,4,wall);
-        W(:,3,wall) = W(:,3,wall) - 2.0*W(:,4,wall);
-        W(:,4,wall) = W(:,4,wall) + 0.5*W(:,4,wall);
-        W(:,1,wall) = 0.0;
+        % Test and Apply on bottom wall
+        if( ~bc_flag(2) )
+            W(:,2,bot_idx) = W(:,2,bot_idx) + 2.5*W(:,4,bot_idx);
+            W(:,3,bot_idx) = W(:,3,bot_idx) - 2.0*W(:,4,bot_idx);
+            W(:,4,bot_idx) = W(:,4,bot_idx) + 0.5*W(:,4,bot_idx);
+            W(:,1,bot_idx) = 0.0;
+        end
         
-        % Apply Boundary condition on top wall
-        wall = (j_glbl_pntr == Nr-1);
-        W(:,1,wall) = W(:,1,wall) + 0.5*W(:,4,wall);
-        W(:,2,wall) = W(:,2,wall) - 2.0*W(:,4,wall);
-        W(:,3,wall) = W(:,3,wall) + 2.5*W(:,4,wall);
-        W(:,4,wall) = 0.0;
+        % Test and Apply on left wall
+        if( ~bc_flag(3) )
+            W(2,:,left_idx) = W(2,:,left_idx) + 2.5*W(4,:,left_idx);
+            W(3,:,left_idx) = W(3,:,left_idx) - 2.0*W(4,:,left_idx);
+            W(4,:,left_idx) = W(4,:,left_idx) + 0.5*W(4,:,left_idx);
+            W(1,:,left_idx) = 0.0;
+        end
+        
+        % Test and Apply  on right wall
+        if( ~bc_flag(4) )
+            W(1,:,right_idx) = W(1,:,right_idx) + 0.5*W(4,:,right_idx);
+            W(2,:,right_idx) = W(2,:,right_idx) - 2.0*W(4,:,right_idx);
+            W(3,:,right_idx) = W(3,:,right_idx) + 2.5*W(4,:,right_idx);
+            W(4,:,right_idx) = 0.0;
+        end
+        
+        % Eliminate any boundaries where the BC is not needed because no
+        % queries lie there
+        if ( isempty( top_idx ) )
+            bc_flag(1) = false;
+        end
+        if ( isempty( bot_idx ) )
+            bc_flag(2) = false;
+        end
+        if ( isempty( left_idx ) )
+            bc_flag(3) = false;
+        end
+        if ( isempty( right_idx ) )
+            bc_flag(4) = false;
+        end
         
         % Indices of the 4x4 kernel relative to the histcounts rules
         %  ( i.e. coordinates relative to i=1,j=1 being the LHS of x/y)
@@ -294,30 +419,123 @@ function [ M, xout, yout, ob_pntr ] = interp2_matrix( X, Y, Xq, Yq, varargin )
         
     end
     
-    % Now cull any C's that correspond to bad indices
-    % (and replace with edgeval)
-    W(:,:,idx_null) = 0.0; % sparse wont read zeros!
+    % Now cull any C's that correspond to out-of-bounds indices
+    W(:,:,idx_null) = 0.0; % sparse wont read the zeros!
     
     % Reshape C to be Ns x Nq
     W = reshape(W, [Ns, Nq] );
     
     %% Global indices
        % Now get iloc(Ns,Nq) and jloc that contain the global
-       % position of each stencil weight
+       % position of each term in the stencil
     
     % Map the local stencil indices to global indices
     % glbl_mat i/j points to xref/yref indices for each query
     i_glbl_sten = i_glbl_pntr + i_sten_mat;
     j_glbl_sten = j_glbl_pntr + j_sten_mat;
     
-    % Ensure unused stencil terms don't throw an error, this shouldn't
-    % affect the results
-    if ( n_order==2 )
-        i_glbl_sten( i_glbl_sten > nx_ref ) = nx_ref;
-        i_glbl_sten( i_glbl_sten < 1      ) = 1;
-        j_glbl_sten( j_glbl_sten > ny_ref ) = ny_ref;
-        j_glbl_sten( j_glbl_sten < 1      ) = 1;
+    %% Apply User-Given Boundary Conditions, if there are any
+    if ( n_order==2 && any(bc_flag) )
+        
+        % Start with BC's defined along X (at Y=0 and Y=Ymax, or bottom and
+        % top) use cubic_bc_x for bc 1 & 2, indexed by nx in the inner dim.
+        % Assign columns of cubic_bc_x(:,1/3) and cubic_bc_x(:,2/4) to values
+        % of i_glbl_sten and j_glbl_sten's first and last 4 stencil
+        % coefficients. 
+        
+        % TOP CONDITION 
+        % Use top_idx, which picks Y=Ymax cases out of i_glbl_pntr array
+        % Use cubic_bc_x(:,1,2), 1 = X indicies to map to, 2 = Y indicies
+        if( bc_flag(1) )
+            
+            % Location of top wall NY+1 node in every stencil with LHS = Ny-1
+            idx_sten = 13:16; % Last 4 for Top-Wall, need to access V's outside
+            
+            % ij_bin advanced by 1 b/c user supplied 2 extra BC's on X for
+            % the corners, meaning each index is shifted forwarded by 1
+            ij_bin = i_glbl_sten( idx_sten, top_idx) + 1; % i coordinate for all the j's at each bot_idx
+            
+            % Update the i (X) Bins
+            i_glbl_sten( idx_sten, top_idx) = reshape( cubic_bc_x( ij_bin ,1), size(ij_bin));
+            
+            % Update the j (Y) bins
+            j_glbl_sten( idx_sten, top_idx) = reshape( cubic_bc_x( ij_bin, 2), size(ij_bin));
+            
+        end
+        
+        % BOTTTOM CONDITION 
+        % Use bot_idx, which picks Y=0 wall cases out of i_glbl_pntr array
+        % Use cubic_bc_x(:,3,4), 3 = X indicies to map to, 4 = Y indicies
+        if( bc_flag(2) )
+            
+            % Location of bottom-wall NY-1 node in every stencil with LHS = 1
+            idx_sten = 1:4; % first 4 for bottom wall, need to access Y<0
+            
+            % IJ bin, positions along the cubic_bc_x reference array 
+            ij_bin = i_glbl_sten( idx_sten, bot_idx) + 1; % i coordinate for all the j's at each bot_idx
+            
+            % Update the i (X) Bins
+            i_glbl_sten( idx_sten, bot_idx) = reshape( cubic_bc_x( ij_bin ,3), size(ij_bin));
+            
+            % Update the j (Y) bins
+            j_glbl_sten( idx_sten, bot_idx) = reshape( cubic_bc_x( ij_bin, 4), size(ij_bin));
+            
+        end
+
+        % Start with BC's defined along Y (at X=0 and X=Xmax, or left and
+        % right. use cubic_bc_y for bc 3 & 4, indexed by ny in the inner
+        % dim. Assign columns of cubic_bc_y(:,1/3) and cubic_bc_y(:,2/4) to
+        % values of i_glbl_sten and j_glbl_sten respectivley,   stencil
+        % coefficients.
+        
+        % LEFT CONDITION 
+        % Use left_idx, which picks X=0 cases out of i_glbl_pntr array
+        % Use cubic_bc_y(:,1/2), 1 = X indicies to map to, 2 = Y indicies
+        if( bc_flag(3) )
+            
+            % Location of Left Wall Nx-1 in the local stencil
+            idx_sten = [1,5,9,13]; 
+            
+            % ij_bin advanced by 1 b/c user supplied 2 extra BC's on X/Y for
+            % the corners, meaning each index is shifted forwarded by 1
+            ij_bin = j_glbl_sten( idx_sten, left_idx) + 1; % i coordinate for all the j's at each bot_idx
+            
+            % Update the i (X) Bins
+            i_glbl_sten( idx_sten, left_idx) = reshape( cubic_bc_y( ij_bin ,1), size(ij_bin));
+            
+            % Update the j (Y) bins
+            j_glbl_sten( idx_sten, left_idx) = reshape( cubic_bc_y( ij_bin, 2), size(ij_bin));
+            
+        end
+        
+        % Right CONDITION 
+        % Use right_idx, which picks X=xmax cases out of i_glbl_pntr array
+        % Use cubic_bc_y(:,3/4), 3 = X indicies to map to, 4 = Y indicies
+        if( bc_flag(4) )
+            
+            % Location of Right Wall Nx+1 in the local stencil
+            idx_sten = [4,8,12,16]; 
+            
+            % ij_bin advanced by 1 b/c user supplied 2 extra BC's on X/Y for
+            % the corners, meaning each index is shifted forwarded by 1
+            ij_bin = j_glbl_sten( idx_sten, right_idx) + 1; % i coordinate for all the j's at each bot_idx
+            
+            % Update the i (X) Bins
+            i_glbl_sten( idx_sten, right_idx) = reshape( cubic_bc_y( ij_bin ,3), size(ij_bin));
+            
+            % Update the j (Y) bins
+            j_glbl_sten( idx_sten, right_idx) = reshape( cubic_bc_y( ij_bin, 4), size(ij_bin));
+            
+        end
+        
     end
+    
+    % Just change bad indicies, which should already be removed by
+    % zeroing weights. If you dont have this, sub2ind fails
+    i_glbl_sten( i_glbl_sten > nx_ref ) = nx_ref;
+    i_glbl_sten( i_glbl_sten < 1      ) = 1;
+    j_glbl_sten( j_glbl_sten > ny_ref ) = ny_ref;
+    j_glbl_sten( j_glbl_sten < 1      ) = 1;
     
     %% Indexing the Sparse Matrix
        % We have iloc,jloc,W of size Ns x Nq,
@@ -325,7 +543,7 @@ function [ M, xout, yout, ob_pntr ] = interp2_matrix( X, Y, Xq, Yq, varargin )
        % of the reference grid that are used
        % to construct any given x/y query. Now want to build the final
        % sparse matrix
-
+        
     % Get row indices for each column of Nq
     I( 1:Ns, 1:Nq ) = repmat( 1:Nq, [Ns,1] ) ;
     
@@ -337,7 +555,7 @@ function [ M, xout, yout, ob_pntr ] = interp2_matrix( X, Y, Xq, Yq, varargin )
     M = sparse( I, J, W, Nq, Nr );
     
     %% Alternative Output
-        
+    
     % Define Output X and Y reference arrays, in the implied ndgrid form 
     % used internally
     if ( nargout>1 )

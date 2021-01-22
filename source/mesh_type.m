@@ -12,6 +12,9 @@ function [mtype, xarray, yarray ]= mesh_type( X, Y )
     xarray = NaN;
     yarray = NaN;
     
+    % Tolerance for equality of floats
+    tol = 1e-10;
+    
     % Test if both are the same size
     if  size( X ) ~= size( Y ) 
         return
@@ -21,11 +24,19 @@ function [mtype, xarray, yarray ]= mesh_type( X, Y )
     if isvector( X )
         mtype = 1;
         
+        % check if uniformly spaced
+        dx = diff( xref ); 
+        dy = diff( yref );
+        
+        % Test if there is any variance in delta
+        if ( range(dx)/dx(1) > tol || ....
+             range(dy)/dy(1) > tol)
+            error('One or more grid vectors are not unfiformly spaced')
+        end
+        
     % test if matrices
     elseif ismatrix( X ) 
         
-        % Tolerance for equality
-        tol = 1e-10;
 
         % Determine which dimensions of X and Y repeat (logical)
         x_row_repeat = abs( ( X(end,1)-X(1,1) ) ) < tol; 

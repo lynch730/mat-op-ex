@@ -1,7 +1,12 @@
 
 close all
 clear; clc;
-addpath('../../source/')
+if (ispc)
+   error('If using windows, add path to source here')
+%   addpath('...\source\')
+else
+   addpath('../../source/')
+end
 
 % This script demonstrates the matrix extraction method of solving interp1
 % Currently this is limited to only linear or cubic interpolation
