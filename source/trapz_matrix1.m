@@ -9,7 +9,7 @@ function [ M ] = trapz_matrix1(  X, varargin )
 %           G(1,1) = M(1,1:Nx) * F(1:Nx,1)
 %
 %% FUNCTION OPTIONS
-%
+%     
 %     M = trapz_matrix1(X,V) returns the same matrix M, but with some
 %     differential volume element V that depends on X. V is either a scalar
 %     multiplied into each grid point equally, or is a vector that matches
@@ -28,7 +28,7 @@ function [ M ] = trapz_matrix1(  X, varargin )
     
     % set default inputs 
     method = 1; % trapz
-    V = []; % Empty 
+    M = []; % Empty 
     
     % Specify input type, if provided
     iarg = nargin;
@@ -51,10 +51,11 @@ function [ M ] = trapz_matrix1(  X, varargin )
            end
            
        % Test vector
-       elseif ( isvector(varargin{iarg-1}) )
+       elseif ( isvector(varargin{iarg-1}) || ...
+                ismatrix(varargin{iarg-1}))
            
            % Store Vmult Array
-           V = varargin{iarg-1};
+           M = varargin{iarg-1};
            
        % Error Case
        else
@@ -77,10 +78,10 @@ function [ M ] = trapz_matrix1(  X, varargin )
     xref = reshape( X, [], 1 );
     
     % Get lengths of the reference arrays, these can be different
-    Nx = numel( xref );
+    Ncol = numel( xref );
     
     % Get cell width, note: cubic arrays must be uniform 
-    dx(:,1) = diff( xref ); 
+    dx(1,:) = diff( xref ); 
     
     % Tack on the last cell
     % ( this isn't used b/c points using it should be culled)
@@ -99,34 +100,42 @@ function [ M ] = trapz_matrix1(  X, varargin )
 
    %%  Create Integration Coefficients V 
    
-   % Initialize V if not provided
-   if ( isempty(V) )
-      V = ones(Nx,1);
-   elseif ( isscalar(V) )
-      V(1:Nx,1) = V(1);
-   elseif ( ~isnumeric(V) )
-       error('Provided V is not numeric')
-   elseif ( length(V)~=Nx )
-       error('Length of V does not match X')
-   end 
-   
-   % Reshape
-   V = reshape(V,[Nx,1]);
-   
-   % Multiply by axis delta
-   V = V .* dx;
-   
+    % Initialize V if not provided
+    if ( isempty(M) )
+        M = ones(1,Ncol);
+    elseif ( isscalar(M) )
+        M(1,1:Ncol) = M(1);
+    elseif ( ~isnumeric(M) )
+        error('Provided V is not numeric')
+    elseif ( numel(M) == numel(xref) )
+        M = reshape( M, 1, [] );
+    elseif ( any( size(M) == Ncol ) )
+        sz = size(M);
+        if (numel(sz)>2)
+           error('V has too many dimensions')
+        end
+        if (sz(1)==Ncol && sz(2)~=Ncol) % flip dimensions
+           sz = flip(sz);
+        end
+        M = reshape(M,sz);
+    else
+        error('V not compatiable with X')
+    end 
+    
+    % Multiply by axis delta
+    M = M .* dx;
+    
     % Fork Integration Method
     if (method == 1 ) % trapz
-
+        
         % TrapZ Coefficients
-        V(1  ) =   V(1  ) .*0.5;
-        V(end) =   V(end) .*0.5;
-
+        M( :, 1  ) =   M( :, 1  ) .*0.5;
+        M( :, end) =   M( :, end) .*0.5;
+        
     elseif (method == 2 ) % Simpsons
-
+        
         % Set default end index for Simpsons
-        Nv = length(V);
+        Nv = Ncol;
         
         % If even grid points (odd panels)
         if ( mod(Nv,2)==0 )
@@ -135,34 +144,34 @@ function [ M ] = trapz_matrix1(  X, varargin )
              Nv  = Nv - 3; 
              
              % Save state of the last 4 terms
-             Vend(1:4) = V(Nv:end);
+             Vend(:,1:4) = M(:,Nv:end);
              
         end
         
         % Simpsons Common Factor
-        V(1:Nv) = V(1:Nv)./3.0;
+        M(:,1:Nv) = M(:,1:Nv)./3.0;
         
         % Simpsons Multipliers
-        V( 2:2:Nv-1  ) = 4.0 .* V( 2:2:Nv-1 ) ;
-        V( 3:2:Nv-2  ) = 2.0 .* V( 3:2:Nv-2 ) ;
+        M( :, 2:2:Nv-1  ) = 4.0 .* M( :, 2:2:Nv-1 ) ;
+        M( :, 3:2:Nv-2  ) = 2.0 .* M( :, 3:2:Nv-2 ) ;
         
         % Finish Even case with Simpsons 3/8
-        if ( Nv < length(V) )
+        if ( Nv < Ncol )
             
             % Overlap term used in both stencils
-            V(Nv)   = V(Nv)   + 0.375*Vend(1);
+            M(:,Nv)   = M(:,Nv)   + 0.375*Vend(:,1);
             
             % Remaining terms 
-            V(Nv+1) = 1.1250*Vend(2);
-            V(Nv+2) = 1.1250*Vend(3);
-            V(Nv+3) =  0.375*Vend(4);
+            M(:,Nv+1) = 1.1250*Vend(:,2);
+            M(:,Nv+2) = 1.1250*Vend(:,3);
+            M(:,Nv+3) =  0.375*Vend(:,4);
             
         end
         
     end
     
-   %% Form of Final Integration Matrix
-   M(1,1:Nx) = V;
-   
+    % Return Sparse
+    M = sparse(M);
+    
 end
 
