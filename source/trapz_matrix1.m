@@ -1,4 +1,4 @@
-function [ M ] = trapz_matrix1(  X, varargin )
+function [ M ] = trapz_matrix1(  X, options )
 %% TRAPZ_MATRIX1, RECOVERING THE VECTOR FROM NUMERICAL INTEGRATION 
 %     
 %     M = trapz_matrix1(X) returns the underlying vector M
@@ -26,53 +26,15 @@ function [ M ] = trapz_matrix1(  X, varargin )
 %% Process inputs
     % Determine if V(vector) or METHOD (string) are passed
     
-    % set default inputs 
-    method = 1; % trapz
-    M = []; % Empty 
-    
-    % Specify input type, if provided
-    iarg = nargin;
-    while (iarg > 1)
-        
-       % Test type
-       if ( isstring(varargin{iarg-1}) || ...
-            ischar(varargin{iarg-1}))
-           
-           % Extract Method
-           method = varargin{iarg-1};
-           
-           % Test type
-           if ( strcmpi( method, 'trapz' ) ) % skip
-               method = 1;
-           elseif (strcmpi( method, 'simpsons' ) )
-               method = 2;
-           else
-               error('Bad string input for METHOD')
-           end
-           
-       % Test vector
-       elseif ( isvector(varargin{iarg-1}) || ...
-                ismatrix(varargin{iarg-1}))
-           
-           % Store Vmult Array
-           M = varargin{iarg-1};
-           
-       % Error Case
-       else
-           error('Unknown VARARGIN')
-       end
-       
-       % decrement iarg
-       iarg = iarg - 1;
-       
+    arguments
+        X (1,:) double {mustBeVector(X), mustBeNumeric, issorted(X), mustBeReal} 
+        options.M (:,:) double
+        options.method (1,:) char {mustBeMember(...
+                            options.method,{'simpsons','trapz'})} = 'trapz'
+        options.interval (:,2) {mustBeInteger(options.interval)}
     end
     
 %% Pre-process the Reference Data
-    
-    % Check if successful
-    if (~isvector(X))
-        error('X is not a vector')
-    end
     
     % Reshape to vector, stored like target arrays (outer, in columns)
     xref = reshape( X, [], 1 );
@@ -92,80 +54,124 @@ function [ M ] = trapz_matrix1(  X, varargin )
         error('grid not distinct')
     end
     
-    % Make sure grids are sorted
-    if ~issorted( xref )   
-        error('grid is not sorted')
-    end
+%     % Make sure grids are sorted
+%     if ~issorted( xref )   
+%         error('grid is not sorted')
+%     end
     
 
    %%  Create Integration Coefficients V 
-   
-    % Initialize V if not provided
-    if ( isempty(M) )
-        M = ones(1,Ncol);
-    elseif ( isscalar(M) )
-        M(1,1:Ncol) = M(1);
-    elseif ( ~isnumeric(M) )
-        error('Provided V is not numeric')
-    elseif ( numel(M) == numel(xref) )
-        M = reshape( M, 1, [] );
-    elseif ( any( size(M) == Ncol ) )
-        sz = size(M);
-        if (numel(sz)>2)
-           error('V has too many dimensions')
-        end
-        if (sz(1)==Ncol && sz(2)~=Ncol) % flip dimensions
-           sz = flip(sz);
-        end
-        M = reshape(M,sz);
-    else
-        error('V not compatiable with X')
-    end 
-    
+
+   % Check M input
+   if isfield(options, 'M')
+       if size(options.M, 2) ~= size(X, 2)
+           error('Columns of M do not match X')           
+       end
+        M = options.M;
+   else
+       M = ones(1, Ncol);
+   end
+   Nrow = size(M, 1);
+
+   % Check 
+   if isfield(options, 'interval')
+       if size(options.interval, 1) > 1 && Nrow==1
+           Nrow = size(options.interval, 1);
+       elseif size(options.interval, 1) ~= Nrow
+           error('Rows of Interval do not match M')           
+       end
+       istart = options.interval(:, 1);
+       iend = options.interval(:, 2);
+       if max(iend)>Ncol || min(istart)<1
+            error('interval contains OOB points')
+       end
+   else
+        istart = ones(Nrow, 1);
+        iend = istart + Ncol - 1;
+   end
+
     % Multiply by axis delta
     M = M .* dx;
     
+    % NOTE:
+    % 5/13/22 - Added ad hoc rule that NaN's in M indicate regions where 
+    % integration is not to occur, such that we "reset" integration bounds
+    % to points adjacent. Implemented in trapz1 only, for the purpose
+    % of allowing inerp+trap operations over restrctied finite volumes
+
     % Fork Integration Method
-    if (method == 1 ) % trapz
+    if options.method == "trapz"
         
         % TrapZ Coefficients
-        M( :, 1  ) =   M( :, 1  ) .*0.5;
-        M( :, end) =   M( :, end) .*0.5;
-        
-    elseif (method == 2 ) % Simpsons
-        
-        % Set default end index for Simpsons
-        Nv = Ncol;
-        
-        % If even grid points (odd panels)
-        if ( mod(Nv,2)==0 )
-             
-            % Reset limits for Simpson
-             Nv  = Nv - 3; 
-             
-             % Save state of the last 4 terms
-             Vend(:,1:4) = M(:,Nv:end);
-             
+        sz = [Nrow, Ncol];
+        NrowM = size(M,1);
+        Ncol_est = 10; % estimated number of columns used in each row
+        i = zeros(Nrow*Ncol_est,1);
+        j = zeros(Nrow*Ncol_est,1);
+        v = zeros(Nrow*Ncol_est,1);
+        cnt = 1;
+        for irow =1:Nrow
+            jnew = istart(irow):iend(irow);
+            N = numel(jnew);
+            Mvec = M(min(NrowM, irow), jnew);
+            Mvec([1,N]) = Mvec([1,N]) *0.5;
+            cnt2 = cnt+N-1;
+            i(cnt:cnt2) = irow;
+            j(cnt:cnt2) = jnew;
+            v(cnt:cnt2) = Mvec;
+            cnt = cnt2 + 1;
         end
+        i(cnt:end) = [];
+        j(cnt:end) = [];
+        v(cnt:end) = [];
+        M = sparse(i, j, v, sz(1), sz(2)); 
+   
+    elseif options.method == "simpsons"
         
-        % Simpsons Common Factor
-        M(:,1:Nv) = M(:,1:Nv)./3.0;
-        
-        % Simpsons Multipliers
-        M( :, 2:2:Nv-1  ) = 4.0 .* M( :, 2:2:Nv-1 ) ;
-        M( :, 3:2:Nv-2  ) = 2.0 .* M( :, 3:2:Nv-2 ) ;
-        
-        % Finish Even case with Simpsons 3/8
-        if ( Nv < Ncol )
+        % TEMPORARY, FIND A VECOTRIZED FORM FOR THIS LOOP
+        for i = 1:Nrow
+
+            % Indicies to use
+            iend_tmp = iend(i);
+            ind = istart(i):iend_tmp;
+            M(setdiff(1:Ncol, ind)) = 0.0;
+
+            % If even grid points (odd panels)
+            modified = false;
+            if (mod(numel(ind), 2) == 0)
+                modified = true;
+                assert( numel(ind) > 4, 'Grid X too small (<4) for simpsons method')
+                 
+                % Reset limits for Simpson
+                Nshift = 3;
+                 iend_tmp = iend_tmp - Nshift;
+                 ind = istart(i):iend_tmp;
+
+                 % Save state of the last 4 terms
+                 Vend(1, 1:Nshift+1) = M(i, iend_tmp+1:iend(i));
+                 
+            end
             
-            % Overlap term used in both stencils
-            M(:,Nv)   = M(:,Nv)   + 0.375*Vend(:,1);
+            % Simpsons Common Factor
+            M(i,ind) = M(i,ind)./3.0;
             
-            % Remaining terms 
-            M(:,Nv+1) = 1.1250*Vend(:,2);
-            M(:,Nv+2) = 1.1250*Vend(:,3);
-            M(:,Nv+3) =  0.375*Vend(:,4);
+            % Simpsons Multipliers
+            M( i, ind(2:2:end-1)  ) = 4.0 .* M( i, ind(2:2:end-1) ) ;
+            M( i, ind(3:2:end-2)  ) = 2.0 .* M( i, ind(3:2:end-2) ) ;
             
+            % Finish Even case with Simpsons 3/8
+            if modified
+                
+                % Overlap term used in both stencils
+                M(i, ind(end))   = M(i, ind(end))   + 0.375*Vend(1, 1);
+                
+                % Remaining terms 
+                M(i, ind(end)+1) = 1.1250*Vend(1, 2);
+                M(i, ind(end)+2) = 1.1250*Vend(1, 3);
+                M(i, ind(end)+3) =  0.375*Vend(1, 4);
+                
+            end
+
         end
         
     end
